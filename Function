@@ -1,0 +1,95 @@
+Sub ExportFootnotesToCalc()
+
+    Dim oDoc As Object
+    Dim oNotes As Object
+    Dim oCalc As Object
+    Dim oSheet As Object
+    Dim oCell As Object
+    Dim i As Long, lastRow As Long
+    Dim entry As String, fullText As String
+    Dim firstChar As String
+
+    ' Récupère le document Writer
+    oDoc = ThisComponent
+
+    ' Récupère les notes de bas de page
+    oNotes = oDoc.getFootnotes()
+
+    ' Détecte si on est déjà dans Calc
+    Dim desktop As Object, oFrame As Object
+    desktop = createUnoService("com.sun.star.frame.Desktop")
+    oFrame = desktop.getCurrentFrame()
+
+    If oFrame.Controller.Model.supportsService("com.sun.star.sheet.SpreadsheetDocument") Then
+        ' Si on est dans Calc → on utilise ce fichier
+        oCalc = oFrame.Controller.Model
+    Else
+        ' Sinon → on ouvre un nouveau document Calc
+        oCalc = desktop.loadComponentFromURL("private:factory/scalc", "_blank", 0, Array())
+    End If
+
+    ' Utilise la première feuille
+    oSheet = oCalc.Sheets.getByIndex(0)
+
+    ' Trouve la première ligne vide
+    lastRow = 0
+    Do While oSheet.getCellByPosition(0, lastRow).String <> ""
+        lastRow = lastRow + 1
+    Loop
+
+    ' Boucle sur toutes les notes
+    For i = 0 To oNotes.getCount() - 1
+        
+        fullText = oNotes(i).String
+                
+        ' Extraction de l'entrée jusqu'à la première ponctuation
+        entry = ExtractEntry(fullText)
+        
+        ' Si l'entrée commence par un mauvais caractère → on ajoute *
+        firstChar = Left(entry, 1)
+        If Not (firstChar Like "[A-Za-zÀ-ÖØ-öø-ÿ]") Then
+            entry = "*" & entry
+        End If
+        
+        ' Écriture dans Calc
+        oSheet.getCellByPosition(0, lastRow).Value = i + 1      ' Numéro simple (compteur)
+        oSheet.getCellByPosition(1, lastRow).String = entry     ' Entrée
+        oSheet.getCellByPosition(2, lastRow).String = fullText  ' Texte complet
+        
+        lastRow = lastRow + 1
+    Next i
+
+    MsgBox "Export terminé : " & (i) & " notes exportées.", 64, "Export Footnotes"
+
+End Sub
+
+
+' -----------------------------------------------------------
+' Fonction : extrait l'entrée jusqu'à la première ponctuation
+' -----------------------------------------------------------
+
+Function ExtractEntry(fullText As String) As String
+    Dim puncts As String
+    Dim pos As Long
+    Dim c As String
+    Dim i As Long
+
+    puncts = ". , ; : ! ? - ( ) [ ] { } … " ' Ponctuation à détecter
+    
+    pos = 0
+    
+    For i = 1 To Len(fullText)
+        c = Mid(fullText, i, 1)
+        
+        If InStr(puncts, c) > 0 Then
+            pos = i
+            Exit For
+        End If
+    Next i
+    
+    If pos > 1 Then
+        ExtractEntry = Left(fullText, pos - 1)
+    Else
+        ExtractEntry = fullText
+    End If
+End Function
